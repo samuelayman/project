@@ -1,4 +1,150 @@
-// بيانات النظام
+// ========== نظام Firebase ==========
+let firebaseDB = null;
+let useFirebase = false;
+let authReady = Promise.resolve();
+
+// Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyD22y5x1w8AqSmN614G_McwEvr2vULGDz8",
+  authDomain: "project1-61c69.firebaseapp.com",
+  databaseURL: "https://project1-61c69-default-rtdb.firebaseio.com",
+  projectId: "project1-61c69",
+  storageBucket: "project1-61c69.firebasestorage.app",
+  messagingSenderId: "993840544380",
+  appId: "1:993840544380:web:28cd5a348ef1c7f5b167f9",
+  measurementId: "G-82RRGQFHV1"
+};
+
+// Initialize Firebase
+if (typeof firebase !== 'undefined') {
+  try {
+    firebase.initializeApp(firebaseConfig);
+    firebaseDB = firebase.database();
+    useFirebase = true;
+    // تسجيل دخول مجهول عشان قواعد الأمان تسمح بالقراءة/الكتابة للتطبيق فقط
+    if (firebase.auth) {
+      authReady = firebase.auth().signInAnonymously()
+        .then(() => console.log("✅ تم تسجيل الدخول المجهول (Auth)"))
+        .catch((err) => console.log("⚠️ فشل تسجيل الدخول المجهول:", err && err.message));
+    }
+    console.log("✅ Firebase متصل بنجاح!");
+  } catch (e) {
+    console.log("⚠️ خطأ في تهيئة Firebase:", e.message);
+    useFirebase = false;
+  }
+} else {
+  console.log("⚠️ Firebase SDK لم يتم تحميله");
+  useFirebase = false;
+}
+
+// تحميل البيانات من Firebase
+function loadDataFromFirebase() {
+  if (!firebaseDB) return Promise.resolve();
+
+  const p1 = firebaseDB.ref('students').once('value').then((snapshot) => {
+    if (snapshot.exists()) {
+      users = snapshot.val();
+      console.log("تم تحميل الطلاب من Firebase");
+    }
+  });
+
+  const p2 = firebaseDB.ref('attendance').once('value').then((snapshot) => {
+    if (snapshot.exists()) {
+      attendance = snapshot.val();
+      console.log("تم تحميل سجل الحضور من Firebase");
+    }
+  });
+
+  const p3 = firebaseDB.ref('schedules').once('value').then((snapshot) => {
+    if (snapshot.exists()) {
+      schedules = snapshot.val();
+      console.log("تم تحميل المواعيد من Firebase");
+    }
+  });
+
+  const p4 = firebaseDB.ref('paymentStatus').once('value').then((snapshot) => {
+    if (snapshot.exists()) {
+      paymentStatus = snapshot.val();
+      currentPaymentMonth = paymentStatus.currentMonth || getMonthKey(new Date());
+      console.log("تم تحميل حالة الدفع من Firebase");
+    }
+  });
+
+  return Promise.all([p1, p2, p3, p4]).catch((e) => {
+    console.log("⚠️ تعذر تحميل بعض البيانات من Firebase:", e && e.message);
+  });
+}
+
+// حفظ في Firebase أو localStorage
+function saveData(type, data) {
+  if (useFirebase && firebaseDB) {
+    const writeNow = () => {
+      if (type === 'students') return firebaseDB.ref('students').set(users);
+      else if (type === 'attendance') return firebaseDB.ref('attendance').set(attendance);
+      else if (type === 'schedules') return firebaseDB.ref('schedules').set(schedules);
+      else if (type === 'paymentStatus') return firebaseDB.ref('paymentStatus').set(paymentStatus);
+    };
+    authReady.then(writeNow).catch((e) =>
+      console.log("⚠️ تعذّر الحفظ في Firebase:", e && e.message));
+  }
+
+  // احفظ أيضاً في localStorage كـ backup
+  if (type === 'students') localStorage.setItem("students", JSON.stringify(users));
+  else if (type === 'attendance') localStorage.setItem("attendance", JSON.stringify(attendance));
+  else if (type === 'schedules') localStorage.setItem("schedules", JSON.stringify(schedules));
+  else if (type === 'paymentStatus') localStorage.setItem("paymentStatus", JSON.stringify(paymentStatus));
+}
+
+// حمّل البيانات عند البداية
+let firebaseReady = null;
+if (useFirebase) {
+  firebaseReady = authReady.then(loadDataFromFirebase);
+}
+
+// ========== نظام تبديل الوضع الليلي ==========
+
+const themeToggle = document.getElementById('themeToggle');
+const htmlElement = document.documentElement;
+const body = document.body;
+
+// قراءة تفضيل المستخدم المحفوظ (أو استخدام تفضيل النظام)
+function initTheme() {
+  const savedTheme = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+  if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+    body.classList.add('dark-mode');
+    updateThemeIcon();
+  } else {
+    body.classList.remove('dark-mode');
+    updateThemeIcon();
+  }
+}
+
+function toggleTheme() {
+  body.classList.toggle('dark-mode');
+
+  const isDarkMode = body.classList.contains('dark-mode');
+  localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+
+  updateThemeIcon();
+}
+
+function updateThemeIcon() {
+  const isDarkMode = body.classList.contains('dark-mode');
+  themeToggle.innerHTML = isDarkMode ? '<span class="theme-icon">☀️</span>' : '<span class="theme-icon">🌙</span>';
+}
+
+// ربط الزر بالدالة
+if (themeToggle) {
+  themeToggle.addEventListener('click', toggleTheme);
+}
+
+// تهيئة الوضع عند تحميل الصفحة
+document.addEventListener('DOMContentLoaded', initTheme);
+
+// ========== نظام حضور الطلاب - الأكواد الأصلية ==========
+
 let users = JSON.parse(localStorage.getItem("students")) || {};
 let attendance = JSON.parse(localStorage.getItem("attendance")) || {};
 let schedules = JSON.parse(localStorage.getItem("schedules")) || {};
@@ -8,14 +154,14 @@ let currentPaymentMonth =
 localStorage.setItem("currentPaymentMonth", currentPaymentMonth);
 if (!paymentStatus[currentPaymentMonth]) {
   paymentStatus[currentPaymentMonth] = {};
-  localStorage.setItem("paymentStatus", JSON.stringify(paymentStatus));
+  saveData('paymentStatus', paymentStatus);
 }
 // ترحيل تلقائي (مرة واحدة فقط) لأي بيانات دفع قديمة كانت مسجّلة قبل نظام الشهور
 if (!localStorage.getItem("paymentStatusMigratedV2")) {
   const oldFlatRecords = {};
   let hadOldData = false;
   for (const key of Object.keys(paymentStatus)) {
-    if (!/^\d{4}-\d{2}$/.test(key)) {
+    if (key !== "currentMonth" && !/^\d{4}-\d{2}$/.test(key)) {
       oldFlatRecords[key] = paymentStatus[key];
       delete paymentStatus[key];
       hadOldData = true;
@@ -26,9 +172,10 @@ if (!localStorage.getItem("paymentStatusMigratedV2")) {
       oldFlatRecords,
       paymentStatus[currentPaymentMonth] || {}
     );
-    localStorage.setItem("paymentStatus", JSON.stringify(paymentStatus));
+    saveData('paymentStatus', paymentStatus);
   }
   localStorage.setItem("paymentStatusMigratedV2", "true");
+  if (useFirebase && firebaseDB) authReady.then(() => firebaseDB.ref('metadata/paymentStatusMigratedV2').set(true)).catch(() => {});
 }
 const TEACHER_ID = "1515";
 const TEACHER_PASSWORD = "123456789";
@@ -75,6 +222,65 @@ function formatDateWithDay(dateStr) {
   const day = dateObj.getDate();
   const month = dateObj.getMonth() + 1;
   return `${day}/${month} - ${dayName}`;
+}
+
+// ---------- نظام رمز QR المتغيّر (مضاد للتصوير والمشاركة) ----------
+// الرمز بيتغيّر كل 30 ثانية وبيحمل توقيع، فأي صورة قديمة بتبقى لاغية بعد دقيقتين
+const QR_SECRET = "attendance-qr-secret-2026"; // غيّره لأي نص سري خاص بيك
+const QR_WINDOW_SECONDS = 30;      // مدة صلاحية كل رمز
+const QR_SCAN_TOLERANCE = 4;       // عدد النوافذ المسموح بيها للخلف (4 × 30ث = دقيقتين)
+let studentQRTimer = null;
+
+function fnv1aHash(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return (h >>> 0).toString(36);
+}
+function currentQRWindow() {
+  return Math.floor(Date.now() / 1000 / QR_WINDOW_SECONDS);
+}
+function signQR(studentId, windowIndex) {
+  return fnv1aHash(QR_SECRET + "|" + studentId + "|" + windowIndex)
+    .padStart(7, "0")
+    .slice(0, 8);
+}
+function buildStudentQRText(studentId) {
+  const w = currentQRWindow();
+  return "STU2:" + studentId + ":" + w + ":" + signQR(studentId, w);
+}
+// التحقق من رمز الطالب: يرجّع {ok, studentId, reason}
+function validateStudentQR(qrData) {
+  const parts = String(qrData).split(":");
+  if (parts[0] === "STU2" && parts.length >= 4) {
+    const studentId = parts[1];
+    const w = parseInt(parts[2], 10);
+    const sig = parts[3];
+    if (isNaN(w)) return { ok: false, reason: "تنسيق الرمز غير صحيح" };
+    const nowW = currentQRWindow();
+    // نسمح بالرمز الحالي + نافذة للأمام (فرق توقيت) + دقيقتين للخلف فقط
+    if (w - nowW > 1 || nowW - w > QR_SCAN_TOLERANCE) {
+      return {
+        ok: false,
+        studentId: studentId,
+        reason: "⌛ الرمز انتهت صلاحيته — اطلب من الطالب فتح الرمز من جديد"
+      };
+    }
+    if (signQR(studentId, w) !== sig) {
+      return { ok: false, reason: "❌ رمز غير صالح" };
+    }
+    return { ok: true, studentId: studentId };
+  }
+  // الصيغة القديمة الثابتة لم تعد مقبولة (عشان نمنع تصوير الكود ومشاركته)
+  if (parts[0] === "STUDENT") {
+    return {
+      ok: false,
+      reason: "هذا رمز قديم — اطلب من الطالب فتح رمز QR من جديد"
+    };
+  }
+  return { ok: false, reason: "❌ هذا ليس رمز QR لطالب" };
 }
 
 // ---------- تقويم اختيار التاريخ المخصص ----------
@@ -180,6 +386,11 @@ function showScreen(screenId) {
   if (screenId !== "qrScanner" && video && video.srcObject) {
     stopCamera();
   }
+  // إيقاف تحديث رمز QR لما نسيب لوحة الطالب
+  if (screenId !== "studentDashboard" && studentQRTimer) {
+    clearInterval(studentQRTimer);
+    studentQRTimer = null;
+  }
   // إخفاء جميع الشاشات
   document.querySelectorAll(".screen").forEach((screen) => {
     screen.classList.remove("active");
@@ -191,11 +402,22 @@ function showScreen(screenId) {
     msg.textContent = "";
     msg.className = "message";
   });
+
+  // حفظ الشاشة الحالية في URL hash
+  window.location.hash = screenId;
+
+  // احفظ في localStorage أيضاً
+  localStorage.setItem("currentScreen", screenId);
 }
 
-// دالة مسح المحتوى عند التركيز
-function clearInput(element) {
-  element.value = "";
+// دالة تسجيل الخروج
+function logout() {
+  currentStudent = null;
+  currentTeacher = null;
+  localStorage.setItem("currentStudentId", "");
+  localStorage.setItem("currentTeacherId", "");
+  localStorage.setItem("currentScreen", "mainScreen");
+  showScreen("mainScreen");
 }
 
 // دالة إنشاء رقم طالب عشوائي
@@ -253,7 +475,7 @@ function showClassSchedules() {
     schedulesInfo.innerHTML = html;
   } else {
     schedulesInfo.innerHTML =
-      '<div class="class-schedules-title" style="color: #dc3545;">لا توجد مواعيد مسجلة لهذا الصف</div>';
+      '<div class="class-schedules-title" style="color: var(--danger);">لا توجد مواعيد مسجلة لهذا الصف</div>';
   }
 }
 
@@ -288,6 +510,9 @@ function studentLogin() {
   ) {
     currentStudent = foundUser;
     currentStudent.id = studentId;
+    // احفظ بيانات الطالب
+    localStorage.setItem("currentStudentId", studentId);
+    localStorage.setItem("currentTeacherId", "");
     showStudentDashboard();
     messageDiv.className = "message success";
     messageDiv.textContent = "تم تسجيل الدخول بنجاح!";
@@ -304,6 +529,9 @@ function teacherLogin() {
   const messageDiv = document.getElementById("teacherLoginMessage");
   if (teacherId === TEACHER_ID && password === TEACHER_PASSWORD) {
     currentTeacher = { id: teacherId };
+    // احفظ بيانات المعلم
+    localStorage.setItem("currentTeacherId", teacherId);
+    localStorage.setItem("currentStudentId", "");
     showTeacherDashboard();
     messageDiv.className = "message success";
     messageDiv.textContent = "مرحباً بك أستاذ/ة!";
@@ -385,7 +613,7 @@ function createStudentAccount() {
     type: "student",
     createdDate: new Date().toLocaleString("ar-EG")
   };
-  localStorage.setItem("students", JSON.stringify(users));
+  saveData('students', users);
   messageDiv.className = "message success";
   messageDiv.textContent = "تم إنشاء الحساب بنجاح!";
   document.getElementById("createAccountForm").reset();
@@ -475,24 +703,34 @@ function loadAvailableSchedules() {
 }
 
 function generateQRCode() {
-  const qrData = `STUDENT:${currentStudent.id}:${currentStudent.name}`;
   const qrContainerDiv = document.getElementById("qrCodeContainer");
   qrContainerDiv.innerHTML = `
         <div style="text-align: center;">
             <h3>رمز QR الخاص بك</h3>
-            <div id="qrcode" style="display: inline-block;"></div>
-            <p style="margin-top: 10px; font-size: 14px; color: #666;">
-                قم بإظهار هذا الرمز للمعلم لتسجيل الحضور
-            </p>
+            <div id="qrcode" style="display: inline-block; padding: 16px; background: #ffffff;"></div>
+            <p class="qr-rotate-note">🔄 الرمز يتغيّر تلقائيًا كل ٣٠ ثانية — أظهره للمعلم مباشرةً.<br>الصور القديمة للرمز لا تصلح للتسجيل.</p>
         </div>
     `;
-  qrCode = new QRCode(document.getElementById("qrcode"), {
-    text: qrData,
-    width: 200,
-    height: 200,
+  renderStudentQR();
+  if (studentQRTimer) clearInterval(studentQRTimer);
+  studentQRTimer = setInterval(renderStudentQR, QR_WINDOW_SECONDS * 1000);
+}
+
+function renderStudentQR() {
+  const el = document.getElementById("qrcode");
+  if (!el || !currentStudent) {
+    if (studentQRTimer) clearInterval(studentQRTimer);
+    studentQRTimer = null;
+    return;
+  }
+  el.innerHTML = "";
+  qrCode = new QRCode(el, {
+    text: buildStudentQRText(currentStudent.id),
+    width: 260,
+    height: 260,
     colorDark: "#000000",
     colorLight: "#ffffff",
-    correctLevel: QRCode.CorrectLevel.H
+    correctLevel: QRCode.CorrectLevel.M
   });
 }
 
@@ -537,11 +775,13 @@ function updateAttendanceGroupOptions() {
 function managePaymentStatus() {
   showScreen("managePaymentStatusScreen");
   updateCurrentPaymentMonthLabel();
+  populateMonthSelect("setPaymentMonthSelect", currentPaymentMonth);
 }
 
 function viewStudentsPaymentStatus() {
   showScreen("viewPaymentStatusScreen");
   updateCurrentPaymentMonthLabel();
+  populateMonthSelect("viewPaymentMonthSelect", currentPaymentMonth);
   loadStudentsPaymentStatus();
 }
 
@@ -613,7 +853,7 @@ function filterStudentsListByClassAndGroup() {
 
   let html = `
         <div class="class-section">
-            <h4 style="color: #667eea; margin-top: 10px; border-bottom: 2px solid #667eea; padding-bottom: 10px;">
+            <h4 style="color: var(--primary); margin-top: 10px; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
                 الصف: ${selectedClass} - المجموعة: ${selectedGroup} - عدد الطلاب: ${matchedStudents.length}
             </h4>
     `;
@@ -693,7 +933,7 @@ function loadStudentsListByClassAndGroup() {
         : classAndGroup.group;
     html += `
             <div class="class-section">
-                <h4 style="color: #667eea; margin-top: 30px; border-bottom: 2px solid #667eea; padding-bottom: 10px;">
+                <h4 style="color: var(--primary); margin-top: 30px; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
                     الصف: ${classAndGroup.class} - المجموعة: ${groupDisplay} - عدد الطلاب: ${classAndGroup.students.length}
                 </h4>
         `;
@@ -775,7 +1015,7 @@ function searchStudents() {
           : classAndGroup.group;
       html += `
                 <div class="class-section">
-                    <h4 style="color: #667eea; margin-top: 30px; border-bottom: 2px solid #667eea; padding-bottom: 10px;">
+                    <h4 style="color: var(--primary); margin-top: 30px; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
                         الصف: ${classAndGroup.class} - المجموعة: ${groupDisplay} - عدد الطلاب: ${classAndGroup.students.length}
                     </h4>
             `;
@@ -871,7 +1111,7 @@ function addSchedule() {
     group: group,
     createdAt: new Date().toLocaleString("ar-EG")
   };
-  localStorage.setItem("schedules", JSON.stringify(schedules));
+  saveData('schedules', schedules);
   messageDiv.className = "message success";
   messageDiv.textContent = "تم إضافة الموعد بنجاح!";
   // تنظيف النموذج
@@ -883,7 +1123,7 @@ function addSchedule() {
 function deleteSchedule(scheduleId) {
   if (confirm("هل أنت متأكد من حذف هذا الموعد؟")) {
     delete schedules[scheduleId];
-    localStorage.setItem("schedules", JSON.stringify(schedules));
+    saveData('schedules', schedules);
     loadSchedulesList();
   }
 }
@@ -969,7 +1209,7 @@ function deleteStudent(studentId) {
     delete users[studentId];
     // حذف حالة الدفع أيضاً (من كل الشهور)
     removeStudentPaymentRecords(studentId);
-    localStorage.setItem("students", JSON.stringify(users));
+    saveData('students', users);
     loadStudentsListByClassAndGroup();
     showScreen("manageStudents");
   } else {
@@ -978,7 +1218,7 @@ function deleteStudent(studentId) {
     delete users[id];
     // حذف حالة الدفع أيضاً (من كل الشهور)
     removeStudentPaymentRecords(id);
-    localStorage.setItem("students", JSON.stringify(users));
+    saveData('students', users);
     loadStudentsListByClassAndGroup();
     showScreen("manageStudents");
   }
@@ -1041,7 +1281,7 @@ function updateStudent() {
   if (password) {
     users[studentId].password = password;
   }
-  localStorage.setItem("students", JSON.stringify(users));
+  saveData('students', users);
   messageDiv.className = "message success";
   messageDiv.textContent = "تم تحديث بيانات الطالب بنجاح!";
   setTimeout(() => {
@@ -1119,7 +1359,7 @@ function addStudentByTeacher() {
     type: "student",
     createdDate: new Date().toLocaleString("ar-EG")
   };
-  localStorage.setItem("students", JSON.stringify(users));
+  saveData('students', users);
   messageDiv.className = "message success";
   messageDiv.textContent = "تم إضافة الطالب بنجاح!";
   setTimeout(() => {
@@ -1158,6 +1398,8 @@ function startCamera() {
       video: { facingMode: "environment" }
     })
     .then(function (stream) {
+      video.setAttribute("playsinline", "true");
+      video.muted = true;
       video.srcObject = stream;
       video.play();
       scanning = true;
@@ -1189,62 +1431,87 @@ function stopCamera() {
   }
 }
 
-function scanQRCode() {
+let barcodeDetector = null;
+try {
+  if ("BarcodeDetector" in window) {
+    barcodeDetector = new BarcodeDetector({ formats: ["qr_code"] });
+  }
+} catch (e) {
+  barcodeDetector = null;
+}
+
+async function scanQRCode() {
   if (!scanning) return;
-  if (video.readyState === video.HAVE_ENOUGH_DATA) {
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
-    if (window.jsQR) {
-      const code = jsQR(imageData.data, imageData.width, imageData.height);
-      if (code) {
-        processQRCode(code.data);
-        // كمل تصوير تلقائيًا سواء الكود كان صح أو غلط، من غير قفل الكاميرا أو الرجوع لأي صفحة
-        setTimeout(scanQRCode, 1500);
+  try {
+    if (video.readyState >= 2 && video.videoWidth) {
+      let result = null;
+
+      // 1) القارئ المدمج في المتصفح (الأسرع والأدق) لو متاح
+      if (barcodeDetector) {
+        try {
+          const found = await barcodeDetector.detect(video);
+          if (found && found.length) result = found[0].rawValue;
+        } catch (e) {
+          barcodeDetector = null; // لو فشل نكمل بـ jsQR
+        }
+      }
+
+      // 2) jsQR كبديل
+      if (!result && window.jsQR) {
+        const scale = Math.min(1, 1024 / video.videoWidth);
+        const w = Math.floor(video.videoWidth * scale);
+        const h = Math.floor(video.videoHeight * scale);
+        canvas.width = w;
+        canvas.height = h;
+        context.drawImage(video, 0, 0, w, h);
+        const imageData = context.getImageData(0, 0, w, h);
+        const code = jsQR(imageData.data, w, h, { inversionAttempts: "dontInvert" });
+        if (code && code.data) result = code.data;
+      }
+
+      if (result) {
+        processQRCode(String(result).trim());
+        setTimeout(scanQRCode, 1000);
         return;
       }
     }
+  } catch (err) {
+    console.error("خطأ في قراءة QR:", err);
   }
-  setTimeout(scanQRCode, 100);
+  setTimeout(scanQRCode, 120);
 }
 
 function processQRCode(qrData) {
   const messageDiv = document.getElementById("scannerMessage");
-  if (qrData.startsWith("STUDENT:")) {
-    const parts = qrData.split(":");
-    if (parts.length >= 3) {
-      const studentId = parts[1];
-      const studentName = parts[2];
-      if (users[studentId] && users[studentId].type === "student") {
-        const now = Date.now();
-        // منع إعادة المعالجة الفورية لو نفس الكود لسه قدام الكاميرا في نفس اللحظة
-        if (studentId === lastScannedId && now - lastScannedTime < 5000) {
-          return;
-        }
-        lastScannedId = studentId;
-        lastScannedTime = now;
-        const recorded = recordAttendance(studentId, studentName);
-        if (recorded) {
-          messageDiv.className = "message success";
-          messageDiv.textContent = `✅ تم تسجيل حضور الطالب: ${studentName} — وجّه الكاميرا للطالب التالي`;
-        } else {
-          messageDiv.className = "message error";
-          messageDiv.textContent = `⚠️ الطالب ${studentName} سجل حضوره بالفعل اليوم — وجّه الكاميرا للطالب التالي`;
-        }
-      } else {
-        messageDiv.className = "message error";
-        messageDiv.textContent = "❌ رمز QR غير صحيح!";
-      }
-    } else {
-      messageDiv.className = "message error";
-      messageDiv.textContent = "❌ تنسيق رمز QR غير صحيح!";
-    }
+  const result = validateStudentQR(qrData);
+  if (!result.ok) {
+    messageDiv.className = "message error";
+    messageDiv.textContent = result.reason || "❌ رمز غير صالح";
+    return;
+  }
+  const studentId = result.studentId;
+  if (!(users[studentId] && users[studentId].type === "student")) {
+    messageDiv.className = "message error";
+    messageDiv.textContent = "❌ هذا الطالب غير مسجّل في النظام!";
+    return;
+  }
+  const studentName = users[studentId].name;
+  const now = Date.now();
+  // منع إعادة المعالجة الفورية لو نفس الكود لسه قدام الكاميرا في نفس اللحظة
+  if (studentId === lastScannedId && now - lastScannedTime < 5000) {
+    return;
+  }
+  lastScannedId = studentId;
+  lastScannedTime = now;
+  const recorded = recordAttendance(studentId, studentName);
+  if (recorded) {
+    const debt = paymentDebtNote(studentId);
+    messageDiv.className = debt ? "message error" : "message success";
+    messageDiv.textContent = `✅ تم تسجيل حضور الطالب: ${studentName}${debt} — وجّه الكاميرا للطالب التالي`;
   } else {
     messageDiv.className = "message error";
-    messageDiv.textContent = "❌ هذا ليس رمز QR لطالب!";
+    messageDiv.textContent = `⚠️ الطالب ${studentName} سجل حضوره بالفعل اليوم — وجّه الكاميرا للطالب التالي`;
   }
-
 }
 
 // تسجيل حضور يدوي
@@ -1259,8 +1526,9 @@ function manualAttendance() {
   if (users[studentId] && users[studentId].type === "student") {
     const recorded = recordAttendance(studentId, users[studentId].name);
     if (recorded) {
-      messageDiv.className = "message success";
-      messageDiv.textContent = `✅ تم تسجيل حضور الطالب: ${users[studentId].name}`;
+      const debt = paymentDebtNote(studentId);
+      messageDiv.className = debt ? "message error" : "message success";
+      messageDiv.textContent = `✅ تم تسجيل حضور الطالب: ${users[studentId].name}${debt}`;
     } else {
       messageDiv.className = "message error";
       messageDiv.textContent = `⚠️ الطالب ${users[studentId].name} سجل حضوره بالفعل اليوم!`;
@@ -1282,12 +1550,16 @@ function recordAttendance(studentId, studentName) {
     return false;
   }
   const timeNow = new Date().toLocaleTimeString("ar-EG");
+  const st = users[studentId] || {};
   attendance[today][studentId] = {
     name: studentName,
     time: timeNow,
+    date: today,
+    studentClass: st.studentClass || "",
+    studentGroup: st.studentGroup || "",
     status: "حضور"
   };
-  localStorage.setItem("attendance", JSON.stringify(attendance));
+  saveData('attendance', attendance);
   return true;
 }
 
@@ -1323,7 +1595,7 @@ function viewAllAttendance() {
   const dates = Object.keys(attendance).sort().reverse();
   dates.forEach((date) => {
     const students = attendance[date];
-    html += `<h4 style="margin-top: 20px; color: #667eea;">التاريخ: ${date}</h4><hr>`;
+    html += `<h4 style="margin-top: 20px; color: var(--primary);">التاريخ: ${date}</h4><hr>`;
     for (const [studentId, info] of Object.entries(students)) {
       html += `
                 <div class="attendance-record">
@@ -1420,7 +1692,7 @@ function viewClassAttendance() {
 
     html += `
             <div class="class-section">
-                <h4 class="class-schedules-title" style="border-bottom: 2px solid #667eea; padding-bottom: 10px;">
+                <h4 class="class-schedules-title" style="border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
                     المجموعة: ${groupName} — عدد الطلاب: ${groupStudents.length} (حاضر: ${present.length} / غائب: ${absent.length})
                 </h4>
                 <div class="present-students">
@@ -1532,59 +1804,63 @@ function searchAttendanceById() {
 
 // دوال إدارة حالة الدفع
 
+// عند تغيير الشهر المعروض: يحترم البحث/الفلتر النشط إن وجد
+function onPaymentHistoryMonthChange() {
+  const searchTerm = document.getElementById("searchPaymentStudent").value.trim();
+  const filterClass = document.getElementById("filterPaymentClass").value;
+  const g = document.getElementById("filterPaymentGroup");
+  const s = document.getElementById("filterPaymentStatus");
+  if (searchTerm || filterClass || (g && g.value) || (s && s.value)) {
+    renderFilteredPaymentStatus();
+  } else {
+    loadStudentsPaymentStatus();
+  }
+}
+
 function loadStudentsPaymentStatus() {
   const studentsList = document.getElementById("studentsPaymentStatus");
+  const selectedMonth = getMonthKeyFromPicker("viewPaymentMonthSelect");
   if (Object.keys(users).length === 0) {
     studentsList.innerHTML = "<p>لا توجد حسابات طلاب</p>";
     return;
   }
-  // جمع الطلاب حسب الصف
   const studentsByClass = {};
   for (const [studentId, info] of Object.entries(users)) {
     if (info.type === "student") {
       if (!studentsByClass[info.studentClass]) {
         studentsByClass[info.studentClass] = [];
       }
-      studentsByClass[info.studentClass].push({
-        id: studentId,
-        info: info
-      });
+      studentsByClass[info.studentClass].push({ id: studentId, info: info });
     }
   }
-  let html = "<h3>حالة دفع الطلاب مجموعين حسب الصف</h3>";
+  let html = `<h3>حالة دفع الطلاب — ${formatMonthLabel(selectedMonth)}</h3>`;
   if (Object.keys(studentsByClass).length === 0) {
     html += "<p>لا توجد حسابات طلاب</p>";
     studentsList.innerHTML = html;
     return;
   }
-  // ترتيب الصفوف أبجديًا
   const sortedClasses = Object.keys(studentsByClass).sort();
   sortedClasses.forEach((studentClass) => {
     const students = studentsByClass[studentClass];
     html += `
             <div class="class-section">
-                <h4 style="color: #667eea; margin-top: 30px; border-bottom: 2px solid #667eea; padding-bottom: 10px;">
+                <h4 style="color: var(--primary); margin-top: 30px; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
                     الصف: ${studentClass} - عدد الطلاب: ${students.length}
                 </h4>
         `;
     students.forEach((student) => {
-      const paymentInfo = getStudentPaymentStatus(student.id);
+      const paymentInfo = getStudentPaymentStatus(student.id, selectedMonth);
       html += `
                 <div class="payment-status-card">
                     <div class="student-info">
                         <p><strong>الاسم:</strong> ${student.info.name}</p>
                         <p><strong>رقم الطالب:</strong> ${student.id}</p>
-                        <p><strong>موعد المجموعة:</strong> ${
-                          student.info.studentGroup || "لم يتم اختيار مجموعة"
-                        }</p>
-                        <p><strong>حالة الدفع:</strong> 
-                            <span class="payment-status-badge ${
-                              paymentInfo.badgeClass
-                            }">
-                                ${paymentInfo.status}
-                            </span>
+                        <p><strong>موعد المجموعة:</strong> ${student.info.studentGroup || "لم يتم اختيار مجموعة"}</p>
+                        <p><strong>حالة الدفع:</strong>
+                            <span class="payment-status-badge ${paymentInfo.badgeClass}">${paymentInfo.status}</span>
                         </p>
                     </div>
+                    ${paymentInfo.isPaid ? `<div class="payment-actions"><button class="generate-btn" onclick="showReceipt('${student.id}','${selectedMonth}')">إيصال</button></div>` : ""}
                 </div>
             `;
     });
@@ -1599,17 +1875,13 @@ function loadStudentsForUpdatePaymentStatus() {
     studentsList.innerHTML = "<p>لا توجد حسابات طلاب</p>";
     return;
   }
-  // جمع الطلاب حسب الصف
   const studentsByClass = {};
   for (const [studentId, info] of Object.entries(users)) {
     if (info.type === "student") {
       if (!studentsByClass[info.studentClass]) {
         studentsByClass[info.studentClass] = [];
       }
-      studentsByClass[info.studentClass].push({
-        id: studentId,
-        info: info
-      });
+      studentsByClass[info.studentClass].push({ id: studentId, info: info });
     }
   }
   let html = "<h3>تحديث حالة دفع الطلاب مجموعين حسب الصف</h3>";
@@ -1618,13 +1890,12 @@ function loadStudentsForUpdatePaymentStatus() {
     studentsList.innerHTML = html;
     return;
   }
-  // ترتيب الصفوف أبجديًا
   const sortedClasses = Object.keys(studentsByClass).sort();
   sortedClasses.forEach((studentClass) => {
     const students = studentsByClass[studentClass];
     html += `
             <div class="class-section">
-                <h4 style="color: #667eea; margin-top: 30px; border-bottom: 2px solid #667eea; padding-bottom: 10px;">
+                <h4 style="color: var(--primary); margin-top: 30px; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
                     الصف: ${studentClass} - عدد الطلاب: ${students.length}
                 </h4>
         `;
@@ -1635,27 +1906,16 @@ function loadStudentsForUpdatePaymentStatus() {
                     <div class="student-info">
                         <p><strong>الاسم:</strong> ${student.info.name}</p>
                         <p><strong>رقم الطالب:</strong> ${student.id}</p>
-                        <p><strong>موعد المجموعة:</strong> ${
-                          student.info.studentGroup || "لم يتم اختيار مجموعة"
-                        }</p>
-                        <p><strong>حالة الدفع:</strong> 
-                            <span class="payment-status-badge ${
-                              paymentInfo.badgeClass
-                            }">
-                                ${paymentInfo.status}
-                            </span>
+                        <p><strong>موعد المجموعة:</strong> ${student.info.studentGroup || "لم يتم اختيار مجموعة"}</p>
+                        <p><strong>حالة الدفع:</strong>
+                            <span class="payment-status-badge ${paymentInfo.badgeClass}">${paymentInfo.status}</span>
                         </p>
                     </div>
                     <div class="payment-actions">
-                        <button class="toggle-payment-btn" onclick="togglePaymentStatus('${
-                          student.id
-                        }')">
-                            ${
-                              paymentInfo.isPaid
-                                ? "إلغاء الدفع"
-                                : "تحديد كمدفوع"
-                            }
+                        <button class="toggle-payment-btn" onclick="togglePaymentStatus('${student.id}')">
+                            ${paymentInfo.isPaid ? "إلغاء الدفع" : "تحديد كخالص"}
                         </button>
+                        ${paymentInfo.isPaid ? `<button class="generate-btn" onclick="showReceipt('${student.id}','${currentPaymentMonth}')">إيصال</button>` : ""}
                     </div>
                 </div>
             `;
@@ -1710,49 +1970,59 @@ function filterPaymentStudents() {
 
 function renderFilteredPaymentStatus() {
   const studentsList = document.getElementById("studentsPaymentStatus");
-  const searchTerm = document.getElementById("searchPaymentStudent").value.trim();
+  const searchTerm = document.getElementById("searchPaymentStudent").value.trim().toLowerCase();
   const filterClass = document.getElementById("filterPaymentClass").value;
-  if (!searchTerm && !filterClass) {
+  const groupEl = document.getElementById("filterPaymentGroup");
+  const statusEl = document.getElementById("filterPaymentStatus");
+  const filterGroup = groupEl ? groupEl.value : "";
+  const filterStatus = statusEl ? statusEl.value : "";
+  const selectedMonth = getMonthKeyFromPicker("viewPaymentMonthSelect");
+
+  if (!searchTerm && !filterClass && !filterGroup && !filterStatus) {
     loadStudentsPaymentStatus();
     return;
   }
-  const students = getFilteredPaymentStudents(
-    "searchPaymentStudent",
-    "filterPaymentClass"
-  );
+  const students = [];
+  for (const [studentId, info] of Object.entries(users)) {
+    if (info.type !== "student") continue;
+    if (filterClass && info.studentClass !== filterClass) continue;
+    if (filterGroup && (info.studentGroup || "بدون مجموعة") !== filterGroup) continue;
+    if (searchTerm && !(info.name.toLowerCase().includes(searchTerm) || studentId.toLowerCase().includes(searchTerm))) continue;
+    if (filterStatus) {
+      const p = getStudentPaymentStatus(studentId, selectedMonth);
+      if (filterStatus === "paid" && !p.isPaid) continue;
+      if (filterStatus === "unpaid" && p.isPaid) continue;
+    }
+    students.push({ id: studentId, info: info });
+  }
   if (students.length === 0) {
     studentsList.innerHTML = "<p>لم يتم العثور على طلاب مطابقين</p>";
     return;
   }
   const studentsByClass = groupStudentsByClass(students);
-  let html = "<h3>نتائج البحث</h3>";
+  let html = `<h3>نتائج البحث — ${formatMonthLabel(selectedMonth)}</h3>`;
   const sortedClasses = Object.keys(studentsByClass).sort();
   sortedClasses.forEach((studentClass) => {
     const list = studentsByClass[studentClass];
     html += `
             <div class="class-section">
-                <h4 style="color: #667eea; margin-top: 30px; border-bottom: 2px solid #667eea; padding-bottom: 10px;">
+                <h4 style="color: var(--primary); margin-top: 30px; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
                     الصف: ${studentClass} - عدد الطلاب: ${list.length}
                 </h4>
         `;
     list.forEach((student) => {
-      const paymentInfo = getStudentPaymentStatus(student.id);
+      const paymentInfo = getStudentPaymentStatus(student.id, selectedMonth);
       html += `
                 <div class="payment-status-card">
                     <div class="student-info">
                         <p><strong>الاسم:</strong> ${student.info.name}</p>
                         <p><strong>رقم الطالب:</strong> ${student.id}</p>
-                        <p><strong>موعد المجموعة:</strong> ${
-                          student.info.studentGroup || "لم يتم اختيار مجموعة"
-                        }</p>
-                        <p><strong>حالة الدفع:</strong> 
-                            <span class="payment-status-badge ${
-                              paymentInfo.badgeClass
-                            }">
-                                ${paymentInfo.status}
-                            </span>
+                        <p><strong>موعد المجموعة:</strong> ${student.info.studentGroup || "لم يتم اختيار مجموعة"}</p>
+                        <p><strong>حالة الدفع:</strong>
+                            <span class="payment-status-badge ${paymentInfo.badgeClass}">${paymentInfo.status}</span>
                         </p>
                     </div>
+                    ${paymentInfo.isPaid ? `<div class="payment-actions"><button class="generate-btn" onclick="showReceipt('${student.id}','${selectedMonth}')">إيصال</button></div>` : ""}
                 </div>
             `;
     });
@@ -1772,18 +2042,13 @@ function filterUpdatePaymentStudents() {
 
 function renderFilteredUpdatePaymentStatus() {
   const studentsList = document.getElementById("studentsUpdatePaymentStatus");
-  const searchTerm = document
-    .getElementById("searchUpdatePaymentStudent")
-    .value.trim();
+  const searchTerm = document.getElementById("searchUpdatePaymentStudent").value.trim();
   const filterClass = document.getElementById("filterUpdatePaymentClass").value;
   if (!searchTerm && !filterClass) {
     loadStudentsForUpdatePaymentStatus();
     return;
   }
-  const students = getFilteredPaymentStudents(
-    "searchUpdatePaymentStudent",
-    "filterUpdatePaymentClass"
-  );
+  const students = getFilteredPaymentStudents("searchUpdatePaymentStudent", "filterUpdatePaymentClass");
   if (students.length === 0) {
     studentsList.innerHTML = "<p>لم يتم العثور على طلاب مطابقين</p>";
     return;
@@ -1795,7 +2060,7 @@ function renderFilteredUpdatePaymentStatus() {
     const list = studentsByClass[studentClass];
     html += `
             <div class="class-section">
-                <h4 style="color: #667eea; margin-top: 30px; border-bottom: 2px solid #667eea; padding-bottom: 10px;">
+                <h4 style="color: var(--primary); margin-top: 30px; border-bottom: 2px solid var(--primary); padding-bottom: 10px;">
                     الصف: ${studentClass} - عدد الطلاب: ${list.length}
                 </h4>
         `;
@@ -1806,25 +2071,16 @@ function renderFilteredUpdatePaymentStatus() {
                     <div class="student-info">
                         <p><strong>الاسم:</strong> ${student.info.name}</p>
                         <p><strong>رقم الطالب:</strong> ${student.id}</p>
-                        <p><strong>موعد المجموعة:</strong> ${
-                          student.info.studentGroup || "لم يتم اختيار مجموعة"
-                        }</p>
-                        <p><strong>حالة الدفع:</strong> 
-                            <span class="payment-status-badge ${
-                              paymentInfo.badgeClass
-                            }">
-                                ${paymentInfo.status}
-                            </span>
+                        <p><strong>موعد المجموعة:</strong> ${student.info.studentGroup || "لم يتم اختيار مجموعة"}</p>
+                        <p><strong>حالة الدفع:</strong>
+                            <span class="payment-status-badge ${paymentInfo.badgeClass}">${paymentInfo.status}</span>
                         </p>
                     </div>
                     <div class="payment-actions">
-                        <button class="toggle-payment-btn" onclick="togglePaymentStatus('${
-                          student.id
-                        }')">
-                            ${
-                              paymentInfo.isPaid ? "إلغاء الدفع" : "تحديد كمدفوع"
-                            }
+                        <button class="toggle-payment-btn" onclick="togglePaymentStatus('${student.id}')">
+                            ${paymentInfo.isPaid ? "إلغاء الدفع" : "تحديد كخالص"}
                         </button>
+                        ${paymentInfo.isPaid ? `<button class="generate-btn" onclick="showReceipt('${student.id}','${currentPaymentMonth}')">إيصال</button>` : ""}
                     </div>
                 </div>
             `;
@@ -1847,6 +2103,29 @@ function formatMonthLabel(monthKey) {
   return `${ARABIC_MONTHS[m - 1]} ${toArabicDigits(y)}`;
 }
 
+// كل الشهور اللي عندها بيانات دفع (+ الشهر الحالي دايمًا)، من الأحدث للأقدم
+// تعبئة قائمتي الشهر والسنة (تُستخدم لكل من "تعيين الشهر الحالي" و"عرض شهر معيّن")
+function populateMonthSelect(monthSelectId, monthKey) {
+  const monthSelect = document.getElementById(monthSelectId);
+  if (!monthSelect) return;
+  monthSelect.innerHTML = ARABIC_MONTHS.map(
+    (name, idx) => `<option value="${idx + 1}">${name}</option>`
+  ).join("");
+  const [, m] = monthKey.split("-").map(Number);
+  monthSelect.value = String(m);
+}
+
+// قراءة الشهر المختار كـ "YYYY-MM" (السنة تُؤخذ تلقائيًا من السنة الحالية)
+function getMonthKeyFromPicker(monthSelectId) {
+  const monthSelect = document.getElementById(monthSelectId);
+  if (!monthSelect || !monthSelect.value) {
+    return currentPaymentMonth;
+  }
+  const m = monthSelect.value.padStart(2, "0");
+  const y = new Date().getFullYear();
+  return `${y}-${m}`;
+}
+
 // تحديث نص "الشهر الحالي" في كل شاشات حالة الدفع
 function updateCurrentPaymentMonthLabel() {
   const label = `الشهر الحالي: ${formatMonthLabel(currentPaymentMonth)}`;
@@ -1858,41 +2137,49 @@ function updateCurrentPaymentMonthLabel() {
   );
 }
 
-// بدء شهر دفع جديد: كل الطلاب يرجعوا "غير مدفوع" للشهر الجديد
-// مع الاحتفاظ الكامل بسجل الشهر (الشهور) السابقة
-function startNewPaymentMonth() {
-  const [curY, curM] = currentPaymentMonth.split("-").map(Number);
-  const nextMonthDate = new Date(curY, curM, 1); // curM (1-12) كرقم شهر صفري يعطي الشهر التالي مباشرة
-  const nextMonthKey = getMonthKey(nextMonthDate);
+// تعيين أي شهر (سابق أو لاحق) كـ"الشهر الحالي" مباشرة، من غير التقيد بالتقدم شهر بشهر
+// الطلاب اللي مالهمش سجل دفع في الشهر المختار يعتبروا تلقائيًا "غير مدفوعين" فيه
+// مع الاحتفاظ الكامل بسجلات كل الشهور الأخرى
+function setCurrentPaymentMonthManually() {
+  const chosenMonth = getMonthKeyFromPicker("setPaymentMonthSelect");
+  const messageDiv = document.getElementById("paymentStatusContent");
+
+  if (chosenMonth === currentPaymentMonth) {
+    messageDiv.className = "message";
+    messageDiv.textContent = "هذا هو الشهر الحالي بالفعل.";
+    setTimeout(() => {
+      messageDiv.textContent = "";
+    }, 2000);
+    return;
+  }
 
   const confirmed = confirm(
-    `هل تريد بدء شهر دفع جديد (${formatMonthLabel(
-      nextMonthKey
-    )})؟\nسيتم اعتبار جميع الطلاب "غير مدفوعين" للشهر الجديد، مع الاحتفاظ الكامل بسجل الشهر الحالي وكل الشهور السابقة.`
+    `هل تريد تعيين "${formatMonthLabel(
+      chosenMonth
+    )}" كشهر الدفع الحالي؟\nالطلاب اللي مالهمش سجل دفع في هذا الشهر هيظهروا "غير مدفوعين"، وتبقى كل الشهور الأخرى محفوظة زي ما هي.`
   );
   if (!confirmed) return;
 
-  currentPaymentMonth = nextMonthKey;
+  currentPaymentMonth = chosenMonth;
   localStorage.setItem("currentPaymentMonth", currentPaymentMonth);
+  if (useFirebase && firebaseDB) authReady.then(() => firebaseDB.ref('paymentStatus/currentMonth').set(currentPaymentMonth)).catch(() => {});
 
   if (!paymentStatus[currentPaymentMonth]) {
     paymentStatus[currentPaymentMonth] = {};
+    saveData('paymentStatus', paymentStatus);
   }
-  localStorage.setItem("paymentStatus", JSON.stringify(paymentStatus));
 
   updateCurrentPaymentMonthLabel();
+  populateMonthSelect("setPaymentMonthSelect", currentPaymentMonth);
 
-  const messageDiv = document.getElementById("paymentStatusContent");
-  if (messageDiv) {
-    messageDiv.className = "message success";
-    messageDiv.textContent = `✅ تم بدء شهر جديد: ${formatMonthLabel(
-      currentPaymentMonth
-    )} — كل الطلاب الآن غير مدفوعين لهذا الشهر`;
-    setTimeout(() => {
-      messageDiv.textContent = "";
-      messageDiv.className = "message";
-    }, 3500);
-  }
+  messageDiv.className = "message success";
+  messageDiv.textContent = `✅ الشهر الحالي الآن: ${formatMonthLabel(
+    currentPaymentMonth
+  )}`;
+  setTimeout(() => {
+    messageDiv.textContent = "";
+    messageDiv.className = "message";
+  }, 3500);
 
   // إعادة تحميل أي قوائم معروضة حاليًا حتى تعكس الشهر الجديد فورًا
   if (document.getElementById("studentsPaymentStatus")) {
@@ -1913,11 +2200,11 @@ function removeStudentPaymentRecords(studentId) {
     }
   }
   if (changed) {
-    localStorage.setItem("paymentStatus", JSON.stringify(paymentStatus));
+    saveData('paymentStatus', paymentStatus);
   }
 }
 
-function getStudentPaymentStatus(studentId) {
+function getStudentPaymentStatus(studentId, monthKey = currentPaymentMonth) {
   const student = users[studentId];
   if (!student)
     return {
@@ -1925,26 +2212,32 @@ function getStudentPaymentStatus(studentId) {
       badgeClass: "unpaid",
       paid: 0,
       remaining: 0,
-      isPaid: false
+      isPaid: false,
+      paidAt: "",
+      receiptNo: ""
     };
-  const monthRecord = (paymentStatus[currentPaymentMonth] || {})[studentId];
-  // التحقق من حالة الدفع للشهر الحالي فقط
+  const monthRecord = (paymentStatus[monthKey] || {})[studentId];
+  // التحقق من حالة الدفع للشهر المطلوب
   if (monthRecord && monthRecord.isPaid) {
     return {
-      status: "مدفوع بالكامل",
+      status: "خالص",
       badgeClass: "paid",
-      paid: student.lessonFee || 0,
+      paid: monthRecord.amount != null ? monthRecord.amount : (student.lessonFee || 0),
       remaining: 0,
-      isPaid: true
+      isPaid: true,
+      paidAt: monthRecord.paidAt || "",
+      receiptNo: monthRecord.receiptNo || ""
     };
   }
-  // الافتراضي لهذا الشهر: غير مدفوع
+  // الافتراضي لهذا الشهر: متأخر في الدفع
   return {
-    status: "غير مدفوع",
+    status: "متأخر في الدفع",
     badgeClass: "unpaid",
     paid: 0,
     remaining: student.lessonFee || 0,
-    isPaid: false
+    isPaid: false,
+    paidAt: "",
+    receiptNo: ""
   };
 }
 
@@ -1954,33 +2247,56 @@ function togglePaymentStatus(studentId) {
   if (!paymentStatus[currentPaymentMonth]) {
     paymentStatus[currentPaymentMonth] = {};
   }
-  // تهيئة حالة الدفع لهذا الشهر إذا لم تكن موجودة
-  if (!paymentStatus[currentPaymentMonth][studentId]) {
-    paymentStatus[currentPaymentMonth][studentId] = {
-      isPaid: false,
-      updatedAt: new Date().toLocaleString("ar-EG")
-    };
-  }
-  // تبديل الحالة
-  paymentStatus[currentPaymentMonth][studentId].isPaid =
-    !paymentStatus[currentPaymentMonth][studentId].isPaid;
-  paymentStatus[currentPaymentMonth][studentId].updatedAt =
-    new Date().toLocaleString("ar-EG");
-  // حفظ التغييرات
-  localStorage.setItem("paymentStatus", JSON.stringify(paymentStatus));
-  // إعادة تحميل القائمة
+  const monthBucket = paymentStatus[currentPaymentMonth];
+  const nowStr = new Date().toLocaleString("ar-EG");
+  const rec = monthBucket[studentId] || { isPaid: false };
+  const willBePaid = !rec.isPaid;
 
-  loadStudentsForUpdatePaymentStatus();
-  // عرض رسالة نجاح
+  if (willBePaid) {
+    // تسجيل الدفع + إنشاء إيصال
+    rec.isPaid = true;
+    rec.amount = Number(student.lessonFee) || 0;
+    rec.paidAt = nowStr;
+    rec.receiptNo = makeReceiptNo(studentId, currentPaymentMonth);
+    rec.updatedAt = nowStr;
+  } else {
+    // إلغاء الدفع
+    rec.isPaid = false;
+    rec.updatedAt = nowStr;
+    delete rec.amount;
+    delete rec.paidAt;
+    delete rec.receiptNo;
+  }
+  monthBucket[studentId] = rec;
+  saveData('paymentStatus', paymentStatus);
+
+  // حدّث القائمة المعروضة (مع احترام البحث/الفلتر النشط)
+  if (document.getElementById("studentsUpdatePaymentStatus")) {
+    const su = document.getElementById("searchUpdatePaymentStudent");
+    const fu = document.getElementById("filterUpdatePaymentClass");
+    if ((su && su.value.trim()) || (fu && fu.value)) {
+      renderFilteredUpdatePaymentStatus();
+    } else {
+      loadStudentsForUpdatePaymentStatus();
+    }
+  }
+
   const messageDiv = document.getElementById("paymentStatusContent");
-  messageDiv.className = "message success";
-  messageDiv.textContent = paymentStatus[studentId].isPaid
-    ? `✅ تم تحديد الطالب ${student.name} كمدفوع`
-    : `✅ تم إلغاء دفع الطالب ${student.name}`;
-  setTimeout(() => {
-    messageDiv.textContent = "";
-    messageDiv.className = "message";
-  }, 2000);
+  if (messageDiv) {
+    messageDiv.className = "message success";
+    messageDiv.textContent = willBePaid
+      ? `✅ تم تحديد الطالب ${student.name} كخالص لشهر ${formatMonthLabel(currentPaymentMonth)}`
+      : `✅ تم إلغاء دفع الطالب ${student.name}`;
+    setTimeout(() => {
+      messageDiv.textContent = "";
+      messageDiv.className = "message";
+    }, 2500);
+  }
+
+  // بعد الدفع: اعرض الإيصال فورًا للطباعة/الحفظ PDF
+  if (willBePaid) {
+    showReceipt(studentId, currentPaymentMonth);
+  }
 }
 
 // توليد رقم طالب عشوائي تلقائيًا عند فتح شاشة إنشاء الحساب
@@ -1998,6 +2314,67 @@ window.addEventListener("beforeunload", function () {
 });
 
 // تهيئة النظام عند تحميل الصفحة
+const PUBLIC_SCREENS = ["mainScreen", "studentLoginScreen", "teacherLoginScreen", "createAccountScreen"];
+
+// شاشات الطالب: كل شاشة ودالة فتحها (بتجهّز محتواها)
+const STUDENT_SCREEN_OPENERS = {
+  studentDashboard: () => showStudentDashboard(),
+  studentSchedule: () => showScheduleScreen(),
+  studentReceipts: () => showStudentReceipts()
+};
+
+// شاشات المعلم: الشاشات اللي محتاجة بيانات مؤقتة (زي تعديل طالب) بترجع لقائمتها
+const TEACHER_SCREEN_OPENERS = {
+  teacherDashboard: () => showTeacherDashboard(),
+  reportsScreen: () => showReports(),
+  selectClassScreen: () => showClassAttendance(),
+  managePaymentStatusScreen: () => managePaymentStatus(),
+  viewPaymentStatusScreen: () => viewStudentsPaymentStatus(),
+  updatePaymentStatusScreen: () => updatePaymentStatus(),
+  scheduleManagement: () => manageSchedules(),
+  manageStudents: () => manageStudents(),
+  addStudentForm: () => showAddStudentForm(),
+  editStudentForm: () => manageStudents(),
+  qrScanner: () => showAttendanceScanner(),
+  manualAttendance: () => showManualAttendance()
+};
+
+function getWantedScreen() {
+  const hashScreen = window.location.hash ? window.location.hash.substring(1) : "";
+  if (hashScreen && document.getElementById(hashScreen)) return hashScreen;
+  const saved = localStorage.getItem("currentScreen");
+  if (saved && document.getElementById(saved)) return saved;
+  return "mainScreen";
+}
+
+function restoreSession() {
+  const wanted = getWantedScreen();
+  const savedStudentId = localStorage.getItem("currentStudentId");
+  const savedTeacherId = localStorage.getItem("currentTeacherId");
+
+  // معلم مسجل دخوله
+  if (savedTeacherId === TEACHER_ID) {
+    currentTeacher = { id: savedTeacherId };
+    const open = TEACHER_SCREEN_OPENERS[wanted] || TEACHER_SCREEN_OPENERS.teacherDashboard;
+    open();
+    return TEACHER_SCREEN_OPENERS[wanted] ? wanted : "teacherDashboard";
+  }
+
+  // طالب مسجل دخوله
+  if (savedStudentId && users[savedStudentId]) {
+    currentStudent = users[savedStudentId];
+    currentStudent.id = savedStudentId;
+    const open = STUDENT_SCREEN_OPENERS[wanted] || STUDENT_SCREEN_OPENERS.studentDashboard;
+    open();
+    return STUDENT_SCREEN_OPENERS[wanted] ? wanted : "studentDashboard";
+  }
+
+  // مش مسجل دخول: الشاشات العامة بس
+  const target = PUBLIC_SCREENS.includes(wanted) ? wanted : "mainScreen";
+  showScreen(target);
+  return target;
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   console.log("نظام حضور الطلاب جاهز!");
   // تهيئة قائمة المجموعات في نماذج الإضافة والتعديل
@@ -2007,4 +2384,296 @@ document.addEventListener("DOMContentLoaded", function () {
     '<option value="">اختر موعد المجموعة (إجباري)</option>';
   document.getElementById("studentGroup").innerHTML =
     '<option value="">اختر موعد المجموعة</option>';
+
+  const savedStudentId = localStorage.getItem("currentStudentId");
+  const needsWait =
+    savedStudentId && !users[savedStudentId] && firebaseReady;
+
+  const finish = () => {
+    const restored = restoreSession();
+    // بعد وصول بيانات Firebase الأحدث، حدّث نفس الشاشة (لو المستخدم لسه فيها)
+    if (firebaseReady && !needsWait && restored !== "qrScanner") {
+      firebaseReady.then(() => {
+        const current = document.querySelector(".screen.active");
+        if (current && current.id === restored) restoreSession();
+      });
+    }
+  };
+
+  if (needsWait) {
+    // استنى بيانات الطلاب من Firebase (بحد أقصى 5 ثواني) بدل ما يرجّعك للرئيسية
+    Promise.race([
+      firebaseReady,
+      new Promise((resolve) => setTimeout(resolve, 5000))
+    ]).then(finish);
+  } else {
+    finish();
+  }
 });
+
+
+// ================= إيصالات الدفع =================
+const CENTER_NAME = "نظام حضور الطلاب";   // غيّره لاسم السنتر / المدرّس
+const RECEIPT_CURRENCY = "جنيه";
+
+function makeReceiptNo(studentId, monthKey) {
+  return "R-" + monthKey.replace("-", "") + "-" + studentId;
+}
+
+// كل إيصالات طالب معيّن (من كل الشهور المدفوعة)
+function getStudentReceipts(studentId) {
+  const list = [];
+  for (const monthKey of Object.keys(paymentStatus)) {
+    if (monthKey === "currentMonth") continue;
+    const rec = (paymentStatus[monthKey] || {})[studentId];
+    if (rec && rec.isPaid) {
+      list.push({
+        monthKey: monthKey,
+        amount: rec.amount != null ? rec.amount : (users[studentId] ? users[studentId].lessonFee : 0),
+        paidAt: rec.paidAt || "",
+        receiptNo: rec.receiptNo || makeReceiptNo(studentId, monthKey)
+      });
+    }
+  }
+  list.sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  return list;
+}
+
+function buildReceiptHTML(studentId, monthKey) {
+  const student = users[studentId] || {};
+  const rec = (paymentStatus[monthKey] || {})[studentId] || {};
+  const amount = rec.amount != null ? rec.amount : (student.lessonFee || 0);
+  const receiptNo = rec.receiptNo || makeReceiptNo(studentId, monthKey);
+  const paidAt = rec.paidAt || new Date().toLocaleString("ar-EG");
+  return `
+    <div class="receipt-header">
+      <div class="receipt-brand">${CENTER_NAME}</div>
+      <div class="receipt-title">إيصال استلام رسوم</div>
+    </div>
+    <div class="receipt-rows">
+      <div class="receipt-row"><span>رقم الإيصال</span><strong>${receiptNo}</strong></div>
+      <div class="receipt-row"><span>اسم الطالب</span><strong>${student.name || ""}</strong></div>
+      <div class="receipt-row"><span>رقم الطالب</span><strong>${studentId}</strong></div>
+      <div class="receipt-row"><span>الصف</span><strong>${student.studentClass || "-"}</strong></div>
+      <div class="receipt-row"><span>المجموعة</span><strong>${student.studentGroup || "-"}</strong></div>
+      <div class="receipt-row"><span>عن شهر</span><strong>${formatMonthLabel(monthKey)}</strong></div>
+      <div class="receipt-row"><span>تاريخ الدفع</span><strong>${paidAt}</strong></div>
+      <div class="receipt-row receipt-amount"><span>المبلغ المدفوع</span><strong>${amount} ${RECEIPT_CURRENCY}</strong></div>
+      <div class="receipt-row"><span>الحالة</span><strong class="receipt-paid">خالص ✔</strong></div>
+    </div>
+    <div class="receipt-foot">شكرًا لالتزامك — ${CENTER_NAME}</div>
+  `;
+}
+
+function showReceipt(studentId, monthKey) {
+  const modal = document.getElementById("receiptModal");
+  const printable = document.getElementById("receiptPrintable");
+  if (!modal || !printable) return;
+  printable.innerHTML = buildReceiptHTML(studentId, monthKey);
+  modal.classList.add("active");
+}
+
+function closeReceipt() {
+  const modal = document.getElementById("receiptModal");
+  if (modal) modal.classList.remove("active");
+}
+
+function printReceipt() {
+  window.print();
+}
+
+// شاشة إيصالات الطالب (في حساب الطالب)
+function showStudentReceipts() {
+  showScreen("studentReceipts");
+  const container = document.getElementById("studentReceiptsList");
+  if (!container) return;
+  if (!currentStudent) {
+    container.innerHTML = "<p>سجّل الدخول أولًا.</p>";
+    return;
+  }
+  const receipts = getStudentReceipts(currentStudent.id);
+  if (receipts.length === 0) {
+    container.innerHTML = "<p>لا توجد إيصالات دفع حتى الآن.</p>";
+    return;
+  }
+  let html = "";
+  receipts.forEach((r) => {
+    html += `
+      <div class="payment-status-card">
+        <div class="student-info">
+          <p><strong>عن شهر:</strong> ${formatMonthLabel(r.monthKey)}</p>
+          <p><strong>المبلغ:</strong> ${r.amount} ${RECEIPT_CURRENCY}</p>
+          <p><strong>تاريخ الدفع:</strong> ${r.paidAt || "-"}</p>
+          <p><strong>رقم الإيصال:</strong> ${r.receiptNo}</p>
+        </div>
+        <div class="payment-actions">
+          <button class="toggle-payment-btn" onclick="showReceipt('${currentStudent.id}','${r.monthKey}')">عرض / طباعة الإيصال</button>
+        </div>
+      </div>`;
+  });
+  container.innerHTML = html;
+}
+
+// ================= تحديث فلتر المجموعة في شاشة عرض الدفع =================
+function onPaymentClassFilterChange() {
+  const selectedClass = document.getElementById("filterPaymentClass").value;
+  const groupSelect = document.getElementById("filterPaymentGroup");
+  if (groupSelect) {
+    groupSelect.innerHTML = '<option value="">كل المجموعات</option>';
+    if (selectedClass) {
+      const added = new Set();
+      for (const schedule of Object.values(schedules)) {
+        if (schedule.class === selectedClass && !added.has(schedule.group)) {
+          added.add(schedule.group);
+          const o = document.createElement("option");
+          o.value = schedule.group;
+          o.textContent = `${schedule.group} - ${schedule.time}`;
+          groupSelect.appendChild(o);
+        }
+      }
+    }
+  }
+  filterPaymentStudents();
+}
+
+// ================= التقارير والإحصائيات =================
+function showReports() {
+  showScreen("reportsScreen");
+  const cls = document.getElementById("reportsClass");
+  const grp = document.getElementById("reportsGroup");
+  const sts = document.getElementById("reportsStatus");
+  const sch = document.getElementById("reportsSearch");
+  if (cls) cls.value = "";
+  if (grp) grp.innerHTML = '<option value="">كل المجموعات</option>';
+  if (sts) sts.value = "";
+  if (sch) sch.value = "";
+  const content = document.getElementById("reportsContent");
+  if (content) content.innerHTML = '<p class="hint-text">اختر الصف ثم اضغط «عرض التقرير» لعرض نِسب الحضور وحالة الدفع.</p>';
+}
+
+function updateReportsGroupOptions() {
+  const selectedClass = document.getElementById("reportsClass").value;
+  const groupSelect = document.getElementById("reportsGroup");
+  groupSelect.innerHTML = '<option value="">كل المجموعات</option>';
+  if (!selectedClass) return;
+  const added = new Set();
+  for (const schedule of Object.values(schedules)) {
+    if (schedule.class === selectedClass && !added.has(schedule.group)) {
+      added.add(schedule.group);
+      const o = document.createElement("option");
+      o.value = schedule.group;
+      o.textContent = `${schedule.group} - ${schedule.time}`;
+      groupSelect.appendChild(o);
+    }
+  }
+}
+
+// أيام الحصص لكل مجموعة = التواريخ اللي فيها حضور لأي طالب من المجموعة
+function computeGroupSessionDates() {
+  const map = {};
+  for (const [date, dayRec] of Object.entries(attendance)) {
+    for (const studentId of Object.keys(dayRec)) {
+      const st = users[studentId];
+      if (!st || st.type !== "student") continue;
+      const key = `${st.studentClass}||${st.studentGroup || "بدون مجموعة"}`;
+      if (!map[key]) map[key] = new Set();
+      map[key].add(date);
+    }
+  }
+  return map;
+}
+
+function countStudentPresent(studentId, dates) {
+  let c = 0;
+  dates.forEach((d) => {
+    if (attendance[d] && attendance[d][studentId]) c++;
+  });
+  return c;
+}
+
+function renderReports() {
+  const selectedClass = document.getElementById("reportsClass").value;
+  const selectedGroup = document.getElementById("reportsGroup").value;
+  const statusFilter = document.getElementById("reportsStatus").value; // "" | paid | unpaid
+  const searchTerm = document.getElementById("reportsSearch").value.trim().toLowerCase();
+  const content = document.getElementById("reportsContent");
+
+  if (!selectedClass) {
+    content.innerHTML = '<div class="message error">الرجاء اختيار الصف الدراسي!</div>';
+    return;
+  }
+  const sessionMap = computeGroupSessionDates();
+
+  let students = Object.entries(users).filter(([id, info]) =>
+    info.type === "student" &&
+    info.studentClass === selectedClass &&
+    (!selectedGroup || (info.studentGroup || "بدون مجموعة") === selectedGroup)
+  );
+  if (searchTerm) {
+    students = students.filter(([id, info]) =>
+      info.name.toLowerCase().includes(searchTerm) || id.toLowerCase().includes(searchTerm));
+  }
+  if (statusFilter) {
+    students = students.filter(([id]) => {
+      const p = getStudentPaymentStatus(id);
+      return statusFilter === "paid" ? p.isPaid : !p.isPaid;
+    });
+  }
+  if (students.length === 0) {
+    content.innerHTML = "<p>لا يوجد طلاب مطابقون للفلاتر.</p>";
+    return;
+  }
+
+  const byGroup = {};
+  students.forEach(([id, info]) => {
+    const g = info.studentGroup || "بدون مجموعة";
+    if (!byGroup[g]) byGroup[g] = [];
+    byGroup[g].push({ id: id, info: info });
+  });
+
+  let html = "";
+  Object.keys(byGroup).sort().forEach((g) => {
+    const key = `${selectedClass}||${g}`;
+    const dates = sessionMap[key] ? Array.from(sessionMap[key]) : [];
+    const totalSessions = dates.length;
+    const rows = byGroup[g].map(({ id, info }) => {
+      const present = countStudentPresent(id, dates);
+      const pct = totalSessions ? Math.round((present / totalSessions) * 100) : 0;
+      const pay = getStudentPaymentStatus(id);
+      return { id: id, name: info.name, present: present, pct: pct, pay: pay };
+    });
+    const avg = rows.length ? Math.round(rows.reduce((s, r) => s + r.pct, 0) / rows.length) : 0;
+    html += `
+      <div class="class-section">
+        <h4 class="class-schedules-title" style="border-bottom:2px solid var(--primary); padding-bottom:10px;">
+          المجموعة: ${g} — الطلاب: ${rows.length} — الحصص: ${totalSessions} — متوسط الحضور: ${avg}%
+        </h4>`;
+    rows.sort((a, b) => b.pct - a.pct).forEach((r) => {
+      html += `
+        <div class="report-row">
+          <div class="report-main">
+            <strong>${r.name}</strong> <span class="report-id">(${r.id})</span>
+            <span class="payment-status-badge ${r.pay.badgeClass}">${r.pay.status}</span>
+          </div>
+          <div class="report-bar-wrap" title="${r.present} من ${totalSessions} حصة">
+            <div class="report-bar"><div class="report-bar-fill" style="width:${r.pct}%"></div></div>
+            <span class="report-pct">${r.pct}%</span>
+          </div>
+        </div>`;
+    });
+    html += "</div>";
+  });
+  content.innerHTML = html;
+}
+
+
+// دالة بسيطة لتفريغ خانة الإدخال عند التركيز عليها (كانت مفقودة)
+function clearInput(el) {
+  if (el) el.value = "";
+}
+
+// يرجّع نص تحذير لو الطالب عليه مديونية هذا الشهر (متأخر في الدفع)
+function paymentDebtNote(studentId) {
+  const p = getStudentPaymentStatus(studentId);
+  return p.isPaid ? "" : " — ⚠️ عليه مديونية هذا الشهر (متأخر في الدفع)";
+}
