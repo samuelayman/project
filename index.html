@@ -4,12 +4,12 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1F5C4E">
+  <meta name="theme-color" content="#4F46E5">
   <meta name="description" content="نظام إدارة حضور الطلاب والمدفوعات والمواعيد">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="الحضور">
-  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%231F5C4E' width='192' height='192'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-size='80' font-weight='bold' fill='white' font-family='Arial'>ح</text></svg>">
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%234F46E5' width='192' height='192'/><text x='50%' y='50%' dominant-baseline='middle' text-anchor='middle' font-size='80' font-weight='bold' fill='white' font-family='Arial'>ح</text></svg>">
   <link rel="manifest" href="manifest.json">
   <title>نظام حضور الطلاب</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -431,8 +431,27 @@
   <!-- تسجيل Service Worker -->
   <script>
     if ('serviceWorker' in navigator) {
+      // أعِد تحميل الصفحة مرة واحدة فور تفعيل نسخة جديدة من الـ Service Worker
+      let swRefreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (swRefreshing) return;
+        swRefreshing = true;
+        window.location.reload();
+      });
       navigator.serviceWorker.register('service-worker.js')
-        .then(reg => console.log('✅ Service Worker مسجّل بنجاح'))
+        .then(reg => {
+          // لو فيه تحديث جديد، فعّله فورًا من غير انتظار
+          reg.addEventListener('updatefound', () => {
+            const nw = reg.installing;
+            if (!nw) return;
+            nw.addEventListener('statechange', () => {
+              if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+                nw.postMessage('SKIP_WAITING');
+              }
+            });
+          });
+          console.log('✅ Service Worker مسجّل بنجاح');
+        })
         .catch(err => console.log('⚠️ خطأ في تسجيل Service Worker:', err));
     }
   </script>
